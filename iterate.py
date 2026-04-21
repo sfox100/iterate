@@ -15,6 +15,7 @@ Usage:
     python iterate.py --seed-only              # Just generate the seed document
     python iterate.py --resume                 # Resume from existing document.md
     python iterate.py --cli                    # Use Claude CLI (free with Max plan)
+    python iterate.py --web-search             # Enable Perplexity web search
 
 Setup:
     pip install anthropic python-dotenv
@@ -596,6 +597,8 @@ Examples:
                         help="Resume from existing document.md")
     parser.add_argument("--cli", action="store_true",
                         help="Use Claude CLI instead of API (free with Max plan)")
+    parser.add_argument("--web-search", action="store_true",
+                        help="Enable Perplexity web search (requires PERPLEXITY_API_KEY)")
     parser.add_argument("--model", type=str, default="claude-sonnet-4-20250514",
                         help="Anthropic model to use (default: claude-sonnet-4-20250514)")
     args = parser.parse_args()
@@ -617,6 +620,10 @@ Examples:
     program = parse_program(PROGRAM_FILE)
     critics = program["critics"]
     max_iterations = args.max_iterations or program["settings"].get("iterations", 10)
+
+    # Web search is opt-in: only enable if --web-search flag is set AND key exists
+    if not args.web_search:
+        program["web_searches"] = []
 
     if not critics:
         print("Error: No critics found in program.md.")
@@ -655,10 +662,14 @@ Examples:
         log_live("No evidence directory found (continuing without evidence)")
 
     # Web search status
-    if os.environ.get("PERPLEXITY_API_KEY"):
-        log_live(f"Web search: enabled ({len(program.get('web_searches', []))} queries)")
+    if args.web_search:
+        if os.environ.get("PERPLEXITY_API_KEY"):
+            log_live(f"Web search: enabled ({len(program.get('web_searches', []))} queries)")
+        else:
+            log_live("Web search: --web-search flag set but no PERPLEXITY_API_KEY found")
+            program["web_searches"] = []
     else:
-        log_live("Web search: disabled (no PERPLEXITY_API_KEY)")
+        log_live("Web search: off (use --web-search to enable)")
 
     # Determine starting version
     start_version = next_version_number()
