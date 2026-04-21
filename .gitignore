@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.env
+document.md
+versions/
+run_log.md
+experiments.jsonl
+research_notes.md
+program.md
+evidence/
+!examples/*/evidence/
+!examples/*/program.md
+!templates/
