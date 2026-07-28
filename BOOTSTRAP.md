@@ -20,6 +20,37 @@ You are setting up an autonomous document iteration loop based on the "iterate" 
 (autoresearch for text). The user will tell you what document they're working on. Your job
 is to create a working iteration system customised to their specific task.
 
+### How the technique works
+
+This is Karpathy's autoresearch pattern adapted for prose. Instead of optimising train.py
+against val_bpb, we optimise a document against named critic personas with conflicting agendas.
+
+The loop: Writer (Claude) improves the document -> 2-5 Critics (Claude, in parallel) each
+evaluate from their specific perspective -> Writer picks the 2-3 strongest objections and
+addresses them surgically -> repeat.
+
+**Critical design decisions you must follow when setting this up:**
+
+1. **No quality scoring.** Critics give prose feedback, never numeric scores. Always accept
+   the new version unless the document collapsed below the min word count.
+
+2. **Surgical improvements, not rewrites.** The writer copies strong sections verbatim and
+   only modifies what needs fixing. Full rewrites regress dimensions that were working.
+
+3. **Critics must have conflicting agendas.** If two critics want the same thing, they're
+   effectively one critic. The value is productive disagreement. An investor wants ambition;
+   a CTO wants realism. A customer wants proof; a sales advisor wants urgency.
+
+4. **Named personas, not generic roles.** "A Series A investor who has seen 200+ startups
+   this year and passes on 95%" is far better than "an investor."
+
+5. **Curated evidence, not raw dumps.** Total evidence should be 100-300KB of structured
+   summaries. If the user has raw transcripts or long documents, help them condense first.
+
+6. **The iteration curve:** Phase 1 (iterations 1-2) fixes what's WRONG. Phase 2 (3-5) finds
+   what's MISSING. Phase 3 (6-8) handles the SKEPTIC. After 8-10 iterations, returns diminish -
+   the ceiling is real-world data.
+
 ### Step 1: Ask the user what they're working on
 
 Ask these questions (adapt based on what they've already told you):
@@ -355,6 +386,7 @@ def main():
     parser.add_argument("--seed-only", action="store_true")
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--cli", action="store_true", help="Use Claude CLI (free with Max plan)")
+    parser.add_argument("--web-search", action="store_true", help="Enable Perplexity web search")
     parser.add_argument("--model", default="claude-sonnet-4-20250514")
     args = parser.parse_args()
 
@@ -370,6 +402,9 @@ def main():
     program = parse_program(PROGRAM_FILE)
     critics = program["critics"]
     max_iter = args.max_iterations or program["settings"].get("iterations", 10)
+
+    if not args.web_search:
+        program["web_searches"] = []
 
     if not critics:
         print("Error: No critics in program.md. Add ### subsections under ## Critics.")
@@ -393,10 +428,14 @@ def main():
     if EVIDENCE_DIR.exists():
         log_live(f"Evidence: {len(evidence):,} chars from {len(list(EVIDENCE_DIR.glob('*.md')))} files")
 
-    if os.environ.get("PERPLEXITY_API_KEY"):
-        log_live(f"Web search: enabled ({len(program.get('web_searches', []))} queries)")
+    if args.web_search:
+        if os.environ.get("PERPLEXITY_API_KEY"):
+            log_live(f"Web search: enabled ({len(program.get('web_searches', []))} queries)")
+        else:
+            log_live("Web search: --web-search set but no PERPLEXITY_API_KEY")
+            program["web_searches"] = []
     else:
-        log_live("Web search: disabled (no PERPLEXITY_API_KEY)")
+        log_live("Web search: off (use --web-search to enable)")
 
     start_v = next_version_number()
     if start_v > 0: log_live(f"Continuing from version {start_v}")
@@ -471,7 +510,11 @@ After creating the files:
 3. If they have an existing draft, save it as document.md
 4. Explain how to run: `python iterate.py --max-iterations 10`
 5. Explain: `--cli` flag uses Claude CLI (free with Max plan)
-6. Explain: set `PERPLEXITY_API_KEY` for web search (optional)
+6. Ask if they want web search enabled. If yes:
+   - They need a Perplexity API key (`export PERPLEXITY_API_KEY=your_key`)
+   - Add `--web-search` flag when running: `python iterate.py --web-search`
+   - Add a `## Web Searches` section to program.md with 3-6 relevant queries
+   - Web search is off by default to keep the setup simple
 
 ### Step 7: Offer to run it
 
