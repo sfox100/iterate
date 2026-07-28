@@ -100,6 +100,10 @@ Each critic persona should have:
 
 Create iterate.py with the following code. This is the complete iteration engine.
 
+(If the user has internet access, you can instead download the canonical copy -
+`curl -sO https://raw.githubusercontent.com/sfox100/iterate/main/iterate.py` - which
+is functionally identical to the code below. The version here is the offline fallback.)
+
 ```python
 #!/usr/bin/env python3
 """
@@ -116,7 +120,6 @@ Usage:
     python iterate.py --cli                    # Use Claude CLI (free with Max plan)
 """
 
-import anthropic
 import json
 import subprocess
 import time
@@ -176,7 +179,7 @@ def parse_program(path):
         elif header.startswith("what not to do"):
             result["what_not_to_do"] = body
         elif header.startswith("web search"):
-            result["web_searches"] = [l.strip().lstrip('- ') for l in body.split('\n') if l.strip() and not l.startswith('#')]
+            result["web_searches"] = [l.strip().lstrip('- ') for l in body.split('\n') if l.strip() and not l.strip().startswith('#')]
     return result
 
 
@@ -191,24 +194,6 @@ def load_all_evidence():
         _evidence_cache[f.name] = c
         parts.append(f"--- {f.name} ---\n{c}")
     return "\n\n".join(parts) or "(No evidence files)"
-
-
-def evidence_search(query, max_results=15):
-    terms = [t for t in query.lower().split() if len(t) > 2]
-    if not _evidence_cache:
-        load_all_evidence()
-    results = []
-    for path in sorted(EVIDENCE_DIR.glob("*.md")):
-        if path.name not in _evidence_cache:
-            _evidence_cache[path.name] = path.read_text()
-        lines = _evidence_cache[path.name].split('\n')
-        for i, line in enumerate(lines):
-            matches = sum(1 for t in terms if t in line.lower())
-            if matches >= max(1, len(terms) // 2):
-                s, e = max(0, i-2), min(len(lines), i+3)
-                results.append((matches, f"[{path.name}:{i+1}] " + '\n'.join(lines[s:e])))
-    results.sort(key=lambda x: -x[0])
-    return "\n\n".join(r[1] for r in results[:max_results]) or f"[No matches for '{query}']"
 
 
 def web_search(query):
@@ -262,12 +247,12 @@ def call_claude_cli(prompt, timeout=600):
     return ""
 
 
-def call_claude_api(client, prompt, model="claude-sonnet-4-20250514", max_tokens=8000):
+def call_claude_api(client, prompt, model="claude-sonnet-4-6", max_tokens=8000):
     return client.messages.create(model=model, max_tokens=max_tokens,
         messages=[{"role": "user", "content": prompt}]).content[0].text
 
 
-def call_claude(client, prompt, use_cli=False, model="claude-sonnet-4-20250514", max_tokens=8000, timeout=600):
+def call_claude(client, prompt, use_cli=False, model="claude-sonnet-4-6", max_tokens=8000, timeout=600):
     return call_claude_cli(prompt, timeout) if use_cli else call_claude_api(client, prompt, model, max_tokens)
 
 
@@ -357,6 +342,10 @@ If you learn something new: <research_note>what you learned</research_note>"""
                 if len(d.split()) >= mn // 2:
                     return d, '\n'.join(lines[:i]).strip() or "update"
                 break
+    # Fallback: no heading found. Treat the first paragraph as the summary.
+    parts = response.strip().split('\n\n', 1)
+    if len(parts) == 2 and len(parts[1].split()) >= mn // 2:
+        return parts[1].strip(), parts[0].strip() or "update"
     return response, "update"
 
 
@@ -387,7 +376,7 @@ def main():
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--cli", action="store_true", help="Use Claude CLI (free with Max plan)")
     parser.add_argument("--web-search", action="store_true", help="Enable Perplexity web search")
-    parser.add_argument("--model", default="claude-sonnet-4-20250514")
+    parser.add_argument("--model", default="claude-sonnet-4-6")
     args = parser.parse_args()
 
     try:
@@ -402,6 +391,8 @@ def main():
     program = parse_program(PROGRAM_FILE)
     critics = program["critics"]
     max_iter = args.max_iterations or program["settings"].get("iterations", 10)
+    if max_iter < 1:
+        max_iter = 1
 
     if not args.web_search:
         program["web_searches"] = []
@@ -416,6 +407,7 @@ def main():
         if not os.environ.get("ANTHROPIC_API_KEY"):
             print("Error: ANTHROPIC_API_KEY not set. Set it or use --cli.")
             return
+        import anthropic  # only needed for API mode, not --cli
         client = anthropic.Anthropic()
 
     with open(RUN_LOG_FILE, "a") as f:
@@ -475,11 +467,13 @@ def main():
             if wc < mn // 2:
                 log_live(f"  SKIPPED - collapsed ({wc} words)")
                 save_version(new_doc, vn, False)
+                # Rejected: keep the previous feedback, not the critique of the
+                # version we just threw away.
             else:
                 doc = new_doc
                 DOCUMENT_FILE.write_text(doc)
                 save_version(new_doc, vn, True)
-            rt = new_rt
+                rt = new_rt
             for n, fb in new_rt.items(): log_live(f"    [{n}]: {fb[:150].replace(chr(10),' ')}...")
             log_experiment({"iteration": i, "version": vn, "timestamp": datetime.now().isoformat(),
                 "description": desc[:200], "word_count": wc, "red_team": {k: v[:300] for k,v in new_rt.items()}})
@@ -488,7 +482,7 @@ def main():
         except Exception as e:
             log_live(f"  Error: {e}"); import traceback; traceback.print_exc(); continue
 
-    log_live(f"\n{'='*60}\nDONE - {i} iterations | {len(doc.split())} words | versions/{VERSIONS_DIR}")
+    log_live(f"\n{'='*60}\nDONE - {i} iterations | {len(doc.split())} words | {VERSIONS_DIR}/")
 
 
 if __name__ == "__main__":

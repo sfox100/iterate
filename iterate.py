@@ -31,7 +31,8 @@ Project structure:
     experiments.jsonl  # Machine-readable experiment log
 """
 
-import anthropic
+from __future__ import annotations
+
 import json
 import subprocess
 import time
@@ -178,32 +179,6 @@ def load_all_evidence() -> str:
     return "\n\n".join(parts)
 
 
-def evidence_search(query: str, max_results: int = 15) -> str:
-    """Simple keyword search across evidence files."""
-    query_lower = query.lower()
-    terms = [t for t in query_lower.split() if len(t) > 2]
-    if not terms:
-        return f"[No valid search terms in '{query}']"
-
-    # Ensure evidence is loaded
-    if not _evidence_cache:
-        load_all_evidence()
-
-    results = []
-    for path in sorted(EVIDENCE_DIR.glob("*.md")):
-        if path.name not in _evidence_cache:
-            _evidence_cache[path.name] = path.read_text()
-        lines = _evidence_cache[path.name].split('\n')
-        for i, line in enumerate(lines):
-            matches = sum(1 for t in terms if t in line.lower())
-            if matches >= max(1, len(terms) // 2):
-                start, end = max(0, i - 2), min(len(lines), i + 3)
-                context = '\n'.join(lines[start:end])
-                results.append((matches, f"[{path.name}:{i+1}] {context}"))
-    results.sort(key=lambda x: -x[0])
-    return "\n\n".join(r[1] for r in results[:max_results]) or f"[No matches for '{query}']"
-
-
 # --- Web search (Perplexity, optional) ------------------------------------
 
 def web_search(query: str) -> str:
@@ -288,7 +263,7 @@ def call_claude_cli(prompt: str, timeout: int = 600) -> str:
 
 
 def call_claude_api(client: anthropic.Anthropic, prompt: str,
-                    model: str = "claude-sonnet-4-20250514",
+                    model: str = "claude-sonnet-4-6",
                     max_tokens: int = 8000) -> str:
     """Call Claude via the Anthropic API."""
     return client.messages.create(
@@ -297,7 +272,7 @@ def call_claude_api(client: anthropic.Anthropic, prompt: str,
     ).content[0].text
 
 
-def call_claude(client, prompt, use_cli=False, model="claude-sonnet-4-20250514",
+def call_claude(client, prompt, use_cli=False, model="claude-sonnet-4-6",
                 max_tokens=8000, timeout=600):
     """Unified Claude caller. Uses CLI or API based on flag."""
     if use_cli:
@@ -514,6 +489,12 @@ Start with 2-3 sentences about what you changed, then the full document.
                     log_live(f"  Output too short ({len(doc.split())} words)")
                     break
 
+    # Fallback: no markdown heading found after both attempts. Treat the first
+    # paragraph as the change summary and everything after the first blank line
+    # as the document, so the summary preamble doesn't leak into document.md.
+    parts = response.strip().split('\n\n', 1)
+    if len(parts) == 2 and len(parts[1].split()) >= min_words // 2:
+        return parts[1].strip(), parts[0].strip() or "document update"
     return response, "document update"
 
 
@@ -586,7 +567,7 @@ Examples:
   python iterate.py --seed-only         # Generate seed document only
   python iterate.py --resume            # Resume from existing document
   python iterate.py --cli               # Use Claude CLI (free with Max plan)
-  python iterate.py --model claude-opus-4-20250514  # Use a specific model
+  python iterate.py --model claude-opus-4-8  # Use a specific model
         """
     )
     parser.add_argument("--max-iterations", type=int, default=None,
@@ -599,8 +580,8 @@ Examples:
                         help="Use Claude CLI instead of API (free with Max plan)")
     parser.add_argument("--web-search", action="store_true",
                         help="Enable Perplexity web search (requires PERPLEXITY_API_KEY)")
-    parser.add_argument("--model", type=str, default="claude-sonnet-4-20250514",
-                        help="Anthropic model to use (default: claude-sonnet-4-20250514)")
+    parser.add_argument("--model", type=str, default="claude-sonnet-4-6",
+                        help="Anthropic model to use (default: claude-sonnet-4-6)")
     args = parser.parse_args()
 
     # Load .env if present
@@ -620,6 +601,8 @@ Examples:
     program = parse_program(PROGRAM_FILE)
     critics = program["critics"]
     max_iterations = args.max_iterations or program["settings"].get("iterations", 10)
+    if max_iterations < 1:
+        max_iterations = 1
 
     # Web search is opt-in: only enable if --web-search flag is set AND key exists
     if not args.web_search:
@@ -639,6 +622,7 @@ Examples:
             print("Error: ANTHROPIC_API_KEY not set.")
             print("Either set the env var or use --cli for Claude CLI (Max plan).")
             return
+        import anthropic  # only needed for API mode, not --cli
         client = anthropic.Anthropic()
 
     # Init logging
@@ -728,6 +712,9 @@ Examples:
             if word_count < min_words // 2:
                 log_live(f"  SKIPPED - collapsed ({word_count} words), keeping previous")
                 save_version(new_document, version_num, False)
+                # Keep the previous feedback: the critics reviewed a version we
+                # just rejected, so feeding it forward would have the writer
+                # "fix" a document that no longer exists.
             else:
                 max_words = program["settings"].get("max_words", 5000)
                 if word_count > max_words * 1.2:
@@ -735,8 +722,7 @@ Examples:
                 document = new_document
                 DOCUMENT_FILE.write_text(document)
                 save_version(new_document, version_num, True)
-
-            red_team_feedback = new_red_team
+                red_team_feedback = new_red_team
 
             # Log feedback
             for name, fb in new_red_team.items():

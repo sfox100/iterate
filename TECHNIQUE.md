@@ -146,7 +146,7 @@ After 8-10 iterations, improvements become marginal. The ceiling is real-world d
 
 **The ceiling is real-world data.** Every type of content hit a quality ceiling around the same point - the writing couldn't improve further without named customers, reply rates, engagement data, or deployment results. The iteration loop is pre-launch refinement. Post-launch, iterate with real data.
 
-**High-quality starting documents have low iteration ceilings.** A document that's already good (started at quality ~4.7/5) gained only 0.15 over 4 rounds. A rough first draft (started at ~3.5/5) gained 1.0+ over the same rounds. This tool is most valuable when starting from a rough draft, not polishing a near-final version.
+**High-quality starting documents have low iteration ceilings.** A document that's already good (started at ~4.7/5 on the numeric rubric we later abandoned - see decision #1) gained only 0.15 over 4 rounds. A rough first draft (started at ~3.5/5) gained 1.0+ over the same rounds. This tool is most valuable when starting from a rough draft, not polishing a near-final version.
 
 ---
 

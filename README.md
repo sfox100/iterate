@@ -124,7 +124,7 @@ python iterate.py --seed-only              # Generate seed document only
 python iterate.py --resume                 # Resume from existing document.md
 python iterate.py --cli                    # Use Claude CLI (free with Max plan)
 python iterate.py --web-search             # Enable Perplexity web search (needs PERPLEXITY_API_KEY)
-python iterate.py --model claude-opus-4-20250514  # Use a different model
+python iterate.py --model claude-opus-4-8  # Use a different model
 ```
 
 ---
@@ -133,6 +133,7 @@ python iterate.py --model claude-opus-4-20250514  # Use a different model
 
 - Python 3.10+
 - An Anthropic API key (`ANTHROPIC_API_KEY`), OR Claude Code with a Max plan (`--cli` flag)
+- The `anthropic` SDK is only needed for API mode - `--cli` mode runs on the standard library alone
 - Optional: `--web-search` flag + Perplexity API key (`PERPLEXITY_API_KEY`) for live web research
 
 ---
