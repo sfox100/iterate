@@ -138,20 +138,6 @@ python iterate.py --model claude-opus-4-8  # Use a different model
 
 ---
 
-## How it compares
-
-| | iterate | autoresearch | Adversary Loops |
-|---|---|---|---|
-| Domain | Prose/strategy | ML code | Prose (single critic) |
-| Quality signal | Named critic feedback | val_bpb (numeric) | Anonymous critique |
-| Critics | 2-5 named personas | N/A | 1 anonymous |
-| Evidence base | Yes | Train data | No |
-| Parallel critics | Yes | N/A | No |
-| Web search | Optional | No | No |
-| Open source | Yes | Yes | No |
-
----
-
 ## Cost
 
 **Using the API** (Claude Sonnet): ~$1.50-3.00 for 10 iterations with 4 critics.
