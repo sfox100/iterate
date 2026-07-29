@@ -14,6 +14,21 @@ Writer (Claude) ──> 2-5 Critics (parallel) ──> Writer addresses stronges
 
 ---
 
+## See it work
+
+[`examples/ai-evaluation/`](examples/ai-evaluation/) is the unedited output of a real 3-iteration run on a blog-post brief - seed draft, final document, and the critic feedback round by round. Nothing in it is hand-edited.
+
+The clearest signal is what happened to the title, because it shows the argument moving rather than the text growing:
+
+| | |
+|---|---|
+| **Seed** | *Your eval set is a changelog, not a map* |
+| **After 3 rounds** | *Your judge will never find the failure you haven't named* |
+
+The critics cut roughly 700 words of setup, promoted the load-bearing claim from the middle of the post to the lead, and sharpened it into the title. Sections 1-2 shrank by about 60% while the core argument got longer - the "surgical edits, not rewrites" behaviour the loop is built around. Full write-up: [examples/ai-evaluation/output/](examples/ai-evaluation/output/README.md).
+
+---
+
 ## Two ways to start
 
 ### Option 1: Let Claude Code set it up (fastest)
